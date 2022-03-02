@@ -10,6 +10,7 @@
         "Leo Grützner"
     ],
     "dependencies": {
+        "dotenv": "^16.0.0",
         "express": "4.3.1",
         "ws": "0.7.2"
     },

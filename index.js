@@ -1,32 +1,77 @@
-var express = require("express"),
-    WebSocket = require("ws"),
-    config = require(__dirname + "/config.json");
+require("dotenv").config();
+const express = require("express");
+const WebSocket = require("ws");
+const config = require(__dirname + "/config.json");
 
-var appResources = config.webRoot.indexOf("/") === 0 ? config.webRoot : __dirname + "/" + config.webRoot,
-    app = express(),
-    server = app.listen(config.port),
-    wss = new WebSocket.Server({
-        server: server
-    });
+const {SHARED_SECRET} = process.env;
+const verificationTimeout = 5000;
+const verifiedSockets = [];
 
+
+const appResources = config.webRoot.indexOf("/") === 0 ? config.webRoot : __dirname + "/" + config.webRoot;
+const app = express();
+const server = app.listen(config.port);
+const wss = new WebSocket.Server({server: server});
 app.use("/", express.static(appResources));
-console.log("Server listening on port " + config.port);
 
-var allConnectedSockets = [];
 
-wss.on("connection", function (socket) {
-    allConnectedSockets.push(socket);
+const info = (msg) => {
+    const date = new Date();
 
-    socket.on("message", function (data) {
-        allConnectedSockets.forEach(function (someSocket) {
-            if (someSocket !== socket) {
-                someSocket.send(data);
+    console.info("[" + date.toLocaleDateString() + "-" + date.toLocaleTimeString() + "] - " + msg)
+}
+
+wss.on("connection", (socket) => {
+
+    setTimeout(() => {
+        if(!verifiedSockets.includes(socket)){
+           info("Closed unverified socket after timeout");
+            try{
+                socket.close();
+            }catch(error){}
+        }
+    }, verificationTimeout);
+
+    info("Received new connection attempt");
+    
+    socket.on("message", (data) => {
+        if(!verifiedSockets.includes(socket)){
+            const args = data.split(" --");
+            info("Received new connection attempt");
+            if(args[0] === SHARED_SECRET){
+                verifiedSockets.push(socket);
+
+                if(args[1] !== "silent"){
+                    socket.send("initialized");
+                    info("Verified silently");
+                }else {
+                    info("Verified socket and send response");
+                }
+            }else {
+                socket.close();
+                info("Closed socket after failed verification");
+            }
+            return;
+        }
+
+        
+        verifiedSockets.forEach((s) => {
+            if (s !== socket) {
+                s.send(data);
             }
         });
+
+        info("Received and relayed message");
     });
 
-    socket.on("close", function () {
-        var idx = allConnectedSockets.indexOf(socket);
-        allConnectedSockets.splice(idx, 1);
+    socket.on("close", () => {
+        var idx = verifiedSockets.indexOf(socket);
+        if(idx >= 0){
+            verifiedSockets.splice(idx, 1);
+        }
+
+        info("Closed socket");
     });
 });
+
+info("Server listening on port " + config.port);
