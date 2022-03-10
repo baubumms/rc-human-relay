@@ -4,6 +4,10 @@ const WebSocket = require("ws");
 const config = require(__dirname + "/config.json");
 
 const {SHARED_SECRET} = process.env;
+if(SHARED_SECRET === undefined){
+    throw new Error("Env var SHARED_SECRET not set!");
+}
+
 const verificationTimeout = 5000;
 const verifiedSockets = [];
 
@@ -37,15 +41,15 @@ wss.on("connection", (socket) => {
     socket.on("message", (data) => {
         if(!verifiedSockets.includes(socket)){
             const args = data.split(" --");
-            info("Received new connection attempt");
+            info("Received new connection attempt " + data);
             if(args[0] === SHARED_SECRET){
                 verifiedSockets.push(socket);
 
                 if(args[1] !== "silent"){
                     socket.send("initialized");
-                    info("Verified silently");
+                    info("Verified socket and sent response");
                 }else {
-                    info("Verified socket and send response");
+                    info("Verified socket silently");
                 }
             }else {
                 socket.close();
